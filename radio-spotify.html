@@ -1,0 +1,1146 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RadioAI — Tu radio personal</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Space+Mono:ital,wght@0,400;0,700;1,400&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0a0a;
+    --surface: #111;
+    --surface2: #1a1a1a;
+    --border: #2a2a2a;
+    --green: #1DB954;
+    --green-dim: #145c2a;
+    --amber: #f59e0b;
+    --red: #ef4444;
+    --white: #f0ede8;
+    --muted: #666;
+    --radius: 4px;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--white);
+    font-family: 'DM Sans', sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    overflow-x: hidden;
+  }
+
+  /* scanline overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0,0,0,0.08) 2px,
+      rgba(0,0,0,0.08) 4px
+    );
+    pointer-events: none;
+    z-index: 100;
+  }
+
+  .header {
+    width: 100%;
+    max-width: 700px;
+    padding: 32px 24px 0;
+    display: flex;
+    align-items: baseline;
+    gap: 16px;
+  }
+
+  .logo {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 52px;
+    letter-spacing: 4px;
+    color: var(--white);
+    line-height: 1;
+  }
+
+  .logo span { color: var(--green); }
+
+  .freq {
+    font-family: 'Space Mono', monospace;
+    font-size: 13px;
+    color: var(--muted);
+    letter-spacing: 2px;
+  }
+
+  /* VU meter bar */
+  .vu-bar {
+    width: 100%;
+    max-width: 700px;
+    padding: 12px 24px 0;
+    display: flex;
+    gap: 3px;
+  }
+  .vu-segment {
+    flex: 1;
+    height: 6px;
+    background: var(--border);
+    border-radius: 1px;
+    transition: background 0.1s;
+  }
+  .vu-segment.active { background: var(--green); }
+  .vu-segment.active.high { background: var(--amber); }
+  .vu-segment.active.peak { background: var(--red); }
+
+  .main {
+    width: 100%;
+    max-width: 700px;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  /* Setup panel */
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+  }
+
+  .panel-title {
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 3px;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-bottom: 16px;
+  }
+
+  .field { margin-bottom: 12px; }
+  .field label {
+    display: block;
+    font-size: 12px;
+    color: var(--muted);
+    margin-bottom: 6px;
+    font-family: 'Space Mono', monospace;
+  }
+  .field input {
+    width: 100%;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--white);
+    padding: 10px 12px;
+    font-size: 13px;
+    font-family: 'Space Mono', monospace;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  .field input:focus { border-color: var(--green); }
+  .field input::placeholder { color: #444; }
+
+  .row { display: flex; gap: 10px; }
+  .row .field { flex: 1; }
+
+  /* Buttons */
+  .btn {
+    font-family: 'Space Mono', monospace;
+    font-size: 12px;
+    letter-spacing: 1px;
+    padding: 10px 20px;
+    border-radius: var(--radius);
+    border: none;
+    cursor: pointer;
+    transition: all 0.15s;
+    text-transform: uppercase;
+  }
+  .btn-green {
+    background: var(--green);
+    color: #000;
+    font-weight: 700;
+  }
+  .btn-green:hover { background: #22e464; transform: translateY(-1px); }
+  .btn-green:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+  .btn-outline {
+    background: transparent;
+    color: var(--white);
+    border: 1px solid var(--border);
+  }
+  .btn-outline:hover { border-color: var(--green); color: var(--green); }
+
+  .btn-red {
+    background: var(--red);
+    color: #fff;
+    font-weight: 700;
+  }
+  .btn-red:hover { background: #f87171; }
+
+  /* Status dot */
+  .status-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+  .dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--muted);
+  }
+  .dot.on-air { background: var(--red); animation: pulse-red 1.2s infinite; }
+  .dot.connected { background: var(--green); }
+  .dot.waiting { background: var(--amber); animation: pulse-amber 1.5s infinite; }
+
+  @keyframes pulse-red {
+    0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(239,68,68,0.5); }
+    50% { opacity: 0.8; box-shadow: 0 0 0 5px rgba(239,68,68,0); }
+  }
+  @keyframes pulse-amber {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  .status-text {
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  /* Now playing card */
+  .now-playing {
+    display: none;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+  .now-playing.visible { display: block; }
+
+  .np-top {
+    display: flex;
+    gap: 16px;
+    padding: 20px;
+    align-items: center;
+  }
+
+  .album-art {
+    width: 72px;
+    height: 72px;
+    border-radius: 2px;
+    background: var(--surface2);
+    flex-shrink: 0;
+    overflow: hidden;
+    position: relative;
+  }
+  .album-art img { width: 100%; height: 100%; object-fit: cover; }
+  .album-art.spinning img {
+    animation: spin 8s linear infinite;
+  }
+  @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+  .np-info { flex: 1; min-width: 0; }
+  .np-song {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 28px;
+    letter-spacing: 2px;
+    line-height: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--white);
+  }
+  .np-artist {
+    font-size: 14px;
+    color: var(--green);
+    margin-top: 4px;
+    font-weight: 500;
+  }
+  .np-album {
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 2px;
+  }
+
+  /* Progress bar */
+  .progress-wrap {
+    padding: 0 20px 16px;
+  }
+  .progress-bg {
+    width: 100%;
+    height: 3px;
+    background: var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .progress-fill {
+    height: 100%;
+    background: var(--green);
+    width: 0%;
+    transition: width 1s linear;
+  }
+  .progress-times {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 6px;
+  }
+  .progress-times span {
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    color: var(--muted);
+  }
+
+  /* DJ Announce box */
+  .announce-box {
+    background: var(--surface2);
+    border-top: 1px solid var(--border);
+    padding: 14px 20px;
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    min-height: 56px;
+  }
+  .dj-label {
+    font-family: 'Space Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 3px;
+    color: var(--muted);
+    margin-top: 1px;
+    white-space: nowrap;
+  }
+  .announce-text {
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--white);
+    font-style: italic;
+  }
+  .announce-text.speaking { color: var(--amber); }
+
+  /* Volume indicator */
+  .vol-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 20px;
+    border-top: 1px solid var(--border);
+  }
+  .vol-label {
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 2px;
+    width: 70px;
+  }
+  .vol-track {
+    flex: 1;
+    height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .vol-fill {
+    height: 100%;
+    background: var(--green);
+    transition: width 0.5s ease;
+  }
+  .vol-num {
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+    width: 32px;
+    text-align: right;
+  }
+
+  /* Control buttons */
+  .controls {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  /* Weather + Time strip */
+  .info-strip {
+    display: flex;
+    gap: 1px;
+    overflow: hidden;
+    border-radius: var(--radius);
+  }
+  .info-tile {
+    flex: 1;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 12px 16px;
+    border-radius: var(--radius);
+  }
+  .info-tile-label {
+    font-family: 'Space Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 3px;
+    color: var(--muted);
+    margin-bottom: 4px;
+  }
+  .info-tile-value {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 24px;
+    letter-spacing: 2px;
+    color: var(--white);
+  }
+  .info-tile-sub {
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 2px;
+  }
+
+  /* Log */
+  .log {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px;
+    max-height: 130px;
+    overflow-y: auto;
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+  }
+  .log::-webkit-scrollbar { width: 4px; }
+  .log::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+  .log-entry { color: var(--muted); padding: 2px 0; border-bottom: 1px solid #1a1a1a; }
+  .log-entry.ok { color: #4ade80; }
+  .log-entry.warn { color: var(--amber); }
+  .log-entry.err { color: var(--red); }
+
+  .help-text {
+    font-size: 11px;
+    color: var(--muted);
+    line-height: 1.7;
+    font-family: 'Space Mono', monospace;
+  }
+  .help-text a { color: var(--green); text-decoration: none; }
+  .help-text a:hover { text-decoration: underline; }
+
+  .tag {
+    display: inline-block;
+    background: var(--green-dim);
+    color: var(--green);
+    font-size: 10px;
+    font-family: 'Space Mono', monospace;
+    padding: 2px 7px;
+    border-radius: 2px;
+    letter-spacing: 1px;
+    margin-left: 6px;
+  }
+
+  .divider {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 16px 0;
+  }
+
+  .ticker-wrap {
+    width: 100%;
+    overflow: hidden;
+    background: var(--green);
+    padding: 6px 0;
+  }
+  .ticker {
+    display: inline-block;
+    white-space: nowrap;
+    animation: ticker 30s linear infinite;
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    color: #000;
+    font-weight: 700;
+    letter-spacing: 2px;
+  }
+  @keyframes ticker {
+    from { transform: translateX(100vw); }
+    to { transform: translateX(-100%); }
+  }
+
+  @media (max-width: 480px) {
+    .logo { font-size: 38px; }
+    .row { flex-direction: column; gap: 0; }
+    .info-strip { flex-direction: column; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="logo">Radio<span>AI</span></div>
+  <div class="freq">FM 91.3 · BUENOS AIRES</div>
+</div>
+
+<!-- VU meter -->
+<div class="vu-bar" id="vuBar"></div>
+
+<div class="main">
+
+  <!-- Setup -->
+  <div class="panel" id="setupPanel">
+    <div class="panel-title">// Configuración inicial</div>
+
+    <div class="help-text" style="margin-bottom:16px">
+      Necesitás 3 cosas:<br>
+      1. <a href="https://developer.spotify.com/dashboard" target="_blank">Spotify App</a> → Client ID + Secret + Redirect URI = <code style="color:var(--amber)">http://localhost</code> (o la URL de este archivo)<br>
+      2. <a href="https://openweathermap.org/api" target="_blank">OpenWeather API Key</a> (gratis)<br>
+      3. Anthropic API Key (para datos curiosos)
+    </div>
+
+    <div class="row">
+      <div class="field">
+        <label>SPOTIFY CLIENT ID</label>
+        <input type="text" id="clientId" placeholder="abc123..." />
+      </div>
+      <div class="field">
+        <label>SPOTIFY CLIENT SECRET</label>
+        <input type="password" id="clientSecret" placeholder="xyz789..." />
+      </div>
+    </div>
+    <div class="field">
+      <label>REDIRECT URI <span class="tag">debe coincidir con tu app Spotify</span></label>
+      <input type="text" id="redirectUri" placeholder="http://localhost" />
+    </div>
+    <div class="row">
+      <div class="field">
+        <label>OPENWEATHER API KEY</label>
+        <input type="password" id="weatherKey" placeholder="opcional..." />
+      </div>
+      <div class="field">
+        <label>ANTHROPIC API KEY</label>
+        <input type="password" id="anthropicKey" placeholder="sk-ant-..." />
+      </div>
+    </div>
+    <div class="field">
+      <label>CIUDAD (para el clima)</label>
+      <input type="text" id="city" placeholder="Buenos Aires" value="Buenos Aires" />
+    </div>
+
+    <hr class="divider">
+
+    <div class="controls">
+      <button class="btn btn-green" id="authBtn" onclick="startAuth()">Conectar con Spotify</button>
+      <button class="btn btn-outline" onclick="loadSaved()">Cargar guardado</button>
+      <button class="btn btn-outline" onclick="saveCreds()">Guardar credenciales</button>
+    </div>
+  </div>
+
+  <!-- Status -->
+  <div class="panel">
+    <div class="status-row">
+      <div class="dot" id="statusDot"></div>
+      <div class="status-text" id="statusText">Esperando configuración...</div>
+    </div>
+    <div class="controls" id="mainControls" style="display:none">
+      <button class="btn btn-green" id="startBtn" onclick="startRadio()">▶ INICIAR RADIO</button>
+      <button class="btn btn-red" id="stopBtn" onclick="stopRadio()" style="display:none">■ DETENER</button>
+      <button class="btn btn-outline" onclick="announceNow()">📢 Anunciar ahora</button>
+    </div>
+  </div>
+
+  <!-- Now playing -->
+  <div class="now-playing" id="nowPlaying">
+    <div class="np-top">
+      <div class="album-art" id="albumArt">
+        <img id="albumImg" src="" alt="">
+      </div>
+      <div class="np-info">
+        <div class="np-song" id="songName">—</div>
+        <div class="np-artist" id="artistName">—</div>
+        <div class="np-album" id="albumName">—</div>
+      </div>
+    </div>
+    <div class="progress-wrap">
+      <div class="progress-bg">
+        <div class="progress-fill" id="progressFill"></div>
+      </div>
+      <div class="progress-times">
+        <span id="timeElapsed">0:00</span>
+        <span id="timeTotal">0:00</span>
+      </div>
+    </div>
+    <div class="vol-row">
+      <div class="vol-label">VOLUMEN</div>
+      <div class="vol-track"><div class="vol-fill" id="volFill" style="width:100%"></div></div>
+      <div class="vol-num" id="volNum">100</div>
+    </div>
+    <div class="announce-box">
+      <div class="dj-label">DJ ►</div>
+      <div class="announce-text" id="announceText">Listo para el aire...</div>
+    </div>
+  </div>
+
+  <!-- Info strip -->
+  <div class="info-strip">
+    <div class="info-tile">
+      <div class="info-tile-label">HORA</div>
+      <div class="info-tile-value" id="clockVal">--:--</div>
+      <div class="info-tile-sub">Local</div>
+    </div>
+    <div class="info-tile">
+      <div class="info-tile-label">CLIMA</div>
+      <div class="info-tile-value" id="weatherVal">--°</div>
+      <div class="info-tile-sub" id="weatherDesc">—</div>
+    </div>
+    <div class="info-tile">
+      <div class="info-tile-label">CANCIONES HOY</div>
+      <div class="info-tile-value" id="countVal">0</div>
+      <div class="info-tile-sub">anunciadas</div>
+    </div>
+  </div>
+
+  <!-- Log -->
+  <div class="panel">
+    <div class="panel-title">// Consola</div>
+    <div class="log" id="logBox"></div>
+  </div>
+
+</div>
+
+<div class="ticker-wrap">
+  <div class="ticker" id="ticker">RADIO AI · FM 91.3 · EN VIVO DESDE BUENOS AIRES · MÚSICA SIN INTERRUPCIONES · </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════
+let spotifyToken = null;
+let refreshToken = null;
+let tokenExpiry = 0;
+let currentTrackId = null;
+let radioRunning = false;
+let pollInterval = null;
+let vuInterval = null;
+let weatherCache = null;
+let announcedCount = 0;
+let isSpeaking = false;
+let currentVolume = 100;
+
+// ═══════════════════════════════════════════
+// VU METER (fake but fun)
+// ═══════════════════════════════════════════
+const vuBar = document.getElementById('vuBar');
+for (let i = 0; i < 32; i++) {
+  const s = document.createElement('div');
+  s.className = 'vu-segment';
+  s.dataset.i = i;
+  vuBar.appendChild(s);
+}
+function animateVU(active) {
+  if (!active) {
+    vuBar.querySelectorAll('.vu-segment').forEach(s => {
+      s.classList.remove('active','high','peak');
+    });
+    return;
+  }
+  const segs = vuBar.querySelectorAll('.vu-segment');
+  const level = Math.floor(Math.random() * 10 + 18);
+  segs.forEach((s, i) => {
+    s.classList.toggle('active', i < level);
+    s.classList.toggle('high', i >= 22 && i < level);
+    s.classList.toggle('peak', i >= 28 && i < level);
+  });
+}
+
+// ═══════════════════════════════════════════
+// LOGGING
+// ═══════════════════════════════════════════
+function log(msg, type = '') {
+  const box = document.getElementById('logBox');
+  const ts = new Date().toLocaleTimeString('es-AR', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  const el = document.createElement('div');
+  el.className = `log-entry ${type}`;
+  el.textContent = `[${ts}] ${msg}`;
+  box.prepend(el);
+  if (box.children.length > 60) box.lastChild.remove();
+}
+
+// ═══════════════════════════════════════════
+// CREDENTIALS
+// ═══════════════════════════════════════════
+function saveCreds() {
+  localStorage.setItem('radioai_creds', JSON.stringify({
+    clientId: document.getElementById('clientId').value,
+    clientSecret: document.getElementById('clientSecret').value,
+    redirectUri: document.getElementById('redirectUri').value,
+    weatherKey: document.getElementById('weatherKey').value,
+    anthropicKey: document.getElementById('anthropicKey').value,
+    city: document.getElementById('city').value,
+  }));
+  log('Credenciales guardadas en localStorage', 'ok');
+}
+
+function loadSaved() {
+  const saved = localStorage.getItem('radioai_creds');
+  if (!saved) { log('No hay credenciales guardadas', 'warn'); return; }
+  const c = JSON.parse(saved);
+  document.getElementById('clientId').value = c.clientId || '';
+  document.getElementById('clientSecret').value = c.clientSecret || '';
+  document.getElementById('redirectUri').value = c.redirectUri || '';
+  document.getElementById('weatherKey').value = c.weatherKey || '';
+  document.getElementById('anthropicKey').value = c.anthropicKey || '';
+  document.getElementById('city').value = c.city || 'Buenos Aires';
+  log('Credenciales cargadas', 'ok');
+}
+
+// ═══════════════════════════════════════════
+// SPOTIFY AUTH (PKCE flow)
+// ═══════════════════════════════════════════
+function generateCodeVerifier(length = 128) {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~';
+  let result = '';
+  const arr = new Uint8Array(length);
+  crypto.getRandomValues(arr);
+  arr.forEach(v => result += chars[v % chars.length]);
+  return result;
+}
+
+async function generateCodeChallenge(verifier) {
+  const data = new TextEncoder().encode(verifier);
+  const digest = await crypto.subtle.digest('SHA-256', data);
+  return btoa(String.fromCharCode(...new Uint8Array(digest)))
+    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+}
+
+async function startAuth() {
+  const clientId = document.getElementById('clientId').value.trim();
+  const redirectUri = document.getElementById('redirectUri').value.trim();
+  if (!clientId || !redirectUri) {
+    log('Completá Client ID y Redirect URI primero', 'err'); return;
+  }
+  const verifier = generateCodeVerifier();
+  const challenge = await generateCodeChallenge(verifier);
+  localStorage.setItem('pkce_verifier', verifier);
+  localStorage.setItem('radioai_client_id', clientId);
+  localStorage.setItem('radioai_redirect_uri', redirectUri);
+
+  const scopes = [
+    'user-read-playback-state',
+    'user-modify-playback-state',
+    'user-read-currently-playing',
+  ].join(' ');
+
+  const url = `https://accounts.spotify.com/authorize?` +
+    `client_id=${clientId}&response_type=code&redirect_uri=${encodeURIComponent(redirectUri)}` +
+    `&code_challenge_method=S256&code_challenge=${challenge}&scope=${encodeURIComponent(scopes)}`;
+
+  log('Abriendo autorización Spotify...', 'warn');
+  window.location.href = url;
+}
+
+async function handleCallback(code) {
+  const clientId = localStorage.getItem('radioai_client_id');
+  const redirectUri = localStorage.getItem('radioai_redirect_uri');
+  const verifier = localStorage.getItem('pkce_verifier');
+  if (!clientId || !verifier) { log('Faltan datos de autenticación', 'err'); return; }
+
+  const body = new URLSearchParams({
+    grant_type: 'authorization_code',
+    code,
+    redirect_uri: redirectUri,
+    client_id: clientId,
+    code_verifier: verifier,
+  });
+
+  try {
+    const r = await fetch('https://accounts.spotify.com/api/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body,
+    });
+    const data = await r.json();
+    if (data.access_token) {
+      spotifyToken = data.access_token;
+      refreshToken = data.refresh_token;
+      tokenExpiry = Date.now() + (data.expires_in * 1000);
+      localStorage.setItem('radioai_token', spotifyToken);
+      localStorage.setItem('radioai_refresh', refreshToken);
+      localStorage.setItem('radioai_expiry', tokenExpiry);
+      // Remove code from URL
+      window.history.replaceState({}, '', window.location.pathname);
+      setStatus('connected', 'Conectado a Spotify ✓');
+      document.getElementById('mainControls').style.display = 'flex';
+      log('Token Spotify obtenido exitosamente', 'ok');
+    } else {
+      log('Error al obtener token: ' + JSON.stringify(data), 'err');
+    }
+  } catch (e) {
+    log('Error de red en auth: ' + e.message, 'err');
+  }
+}
+
+async function refreshAccessToken() {
+  const clientId = localStorage.getItem('radioai_client_id') || document.getElementById('clientId').value;
+  const rt = localStorage.getItem('radioai_refresh');
+  if (!rt || !clientId) return false;
+
+  const body = new URLSearchParams({
+    grant_type: 'refresh_token',
+    refresh_token: rt,
+    client_id: clientId,
+  });
+
+  try {
+    const r = await fetch('https://accounts.spotify.com/api/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body,
+    });
+    const data = await r.json();
+    if (data.access_token) {
+      spotifyToken = data.access_token;
+      tokenExpiry = Date.now() + (data.expires_in * 1000);
+      localStorage.setItem('radioai_token', spotifyToken);
+      localStorage.setItem('radioai_expiry', tokenExpiry);
+      log('Token refrescado', 'ok');
+      return true;
+    }
+  } catch (e) { log('Error refrescando token', 'err'); }
+  return false;
+}
+
+async function ensureToken() {
+  if (tokenExpiry && Date.now() > tokenExpiry - 60000) {
+    return await refreshAccessToken();
+  }
+  return !!spotifyToken;
+}
+
+// ═══════════════════════════════════════════
+// SPOTIFY API
+// ═══════════════════════════════════════════
+async function spotifyGet(endpoint) {
+  await ensureToken();
+  const r = await fetch(`https://api.spotify.com/v1${endpoint}`, {
+    headers: { Authorization: `Bearer ${spotifyToken}` }
+  });
+  if (r.status === 204) return null;
+  if (!r.ok) throw new Error(`Spotify ${r.status}`);
+  return r.json();
+}
+
+async function spotifyPut(endpoint, body = null) {
+  await ensureToken();
+  const opts = {
+    method: 'PUT',
+    headers: { Authorization: `Bearer ${spotifyToken}` }
+  };
+  if (body) { opts.headers['Content-Type'] = 'application/json'; opts.body = JSON.stringify(body); }
+  const r = await fetch(`https://api.spotify.com/v1${endpoint}`, opts);
+  return r.ok;
+}
+
+async function getCurrentTrack() {
+  return await spotifyGet('/me/player/currently-playing');
+}
+
+async function setVolume(pct) {
+  return await spotifyPut(`/me/player/volume?volume_percent=${pct}`);
+}
+
+async function getPlayerState() {
+  return await spotifyGet('/me/player');
+}
+
+// ═══════════════════════════════════════════
+// WEATHER
+// ═══════════════════════════════════════════
+async function fetchWeather() {
+  const key = document.getElementById('weatherKey').value.trim();
+  const city = document.getElementById('city').value.trim() || 'Buenos Aires';
+  if (!key) { return null; }
+  try {
+    const r = await fetch(
+      `https://api.openweathermap.org/data/2.5/weather?q=${encodeURIComponent(city)}&appid=${key}&units=metric&lang=es`
+    );
+    const d = await r.json();
+    if (d.main) {
+      weatherCache = { temp: Math.round(d.main.temp), desc: d.weather[0].description, city };
+      document.getElementById('weatherVal').textContent = weatherCache.temp + '°';
+      document.getElementById('weatherDesc').textContent = weatherCache.desc;
+      return weatherCache;
+    }
+  } catch (e) { log('Error clima: ' + e.message, 'warn'); }
+  return null;
+}
+
+// ═══════════════════════════════════════════
+// AI DATO CURIOSO
+// ═══════════════════════════════════════════
+async function getFunFact(song, artist) {
+  const key = document.getElementById('anthropicKey').value.trim();
+  if (!key) return null;
+  try {
+    const r = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 120,
+        system: 'Sos locutor de radio. Respondé SOLO con una oración curiosa, breve y divertida sobre la canción o artista. Sin introducción. En español. Máximo 25 palabras.',
+        messages: [{ role: 'user', content: `Dato curioso sobre "${song}" de ${artist}` }]
+      })
+    });
+    const d = await r.json();
+    return d.content?.[0]?.text?.trim() || null;
+  } catch (e) { log('Error Claude: ' + e.message, 'warn'); return null; }
+}
+
+// ═══════════════════════════════════════════
+// TEXT TO SPEECH
+// ═══════════════════════════════════════════
+function speak(text, onEnd) {
+  window.speechSynthesis.cancel();
+  const utter = new SpeechSynthesisUtterance(text);
+  utter.lang = 'es-AR';
+  utter.rate = 0.92;
+  utter.pitch = 1.0;
+
+  // Prefer a Spanish voice
+  const voices = window.speechSynthesis.getVoices();
+  const esVoice = voices.find(v => v.lang.startsWith('es') && v.localService) ||
+                  voices.find(v => v.lang.startsWith('es'));
+  if (esVoice) utter.voice = esVoice;
+
+  utter.onend = () => { isSpeaking = false; if (onEnd) onEnd(); };
+  utter.onerror = () => { isSpeaking = false; if (onEnd) onEnd(); };
+  isSpeaking = true;
+  window.speechSynthesis.speak(utter);
+}
+
+
+
+// ═══════════════════════════════════════════
+// DJ ANNOUNCEMENT
+// ═══════════════════════════════════════════
+async function announce(track) {
+  const song = track.item.name;
+  const artist = track.item.artists.map(a => a.name).join(' y ');
+  const album = track.item.album.name;
+
+  // Update UI
+  document.getElementById('songName').textContent = song;
+  document.getElementById('artistName').textContent = artist;
+  document.getElementById('albumName').textContent = album;
+  const imgUrl = track.item.album.images?.[0]?.url;
+  if (imgUrl) { document.getElementById('albumImg').src = imgUrl; document.getElementById('albumArt').classList.add('spinning'); }
+  document.getElementById('nowPlaying').classList.add('visible');
+
+  // Fade volume down
+  log(`Nueva canción detectada: ${song} — ${artist}`, 'ok');
+  const playerState = await getPlayerState();
+  const originalVol = playerState?.device?.volume_percent ?? 100;
+  currentVolume = originalVol;
+  updateVolUI(originalVol);
+
+  await fadeVolume(originalVol, 20, 1500);
+
+  // Build script
+  const hora = new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+  let weatherLine = '';
+  if (weatherCache) {
+    weatherLine = ` Afuera tenemos ${weatherCache.temp} grados y ${weatherCache.desc}.`;
+  } else {
+    const w = await fetchWeather();
+    if (w) weatherLine = ` Afuera tenemos ${w.temp} grados y ${w.desc}.`;
+  }
+
+  const fact = await getFunFact(song, artist);
+  const factLine = fact ? ` ${fact}` : '';
+
+  const scripts = [
+    `Son las ${hora}.${weatherLine} Esto es "${song}" de ${artist}.${factLine} Que la disfruten.`,
+    `Aquí RadioAI, son las ${hora}. Escuchamos "${song}", ${artist} en su máxima expresión.${weatherLine}${factLine}`,
+    `${hora} horas en Buenos Aires.${weatherLine} Con ustedes, "${song}" de ${artist}.${factLine}`,
+  ];
+  const script = scripts[announcedCount % scripts.length];
+
+  setAnnounce(script, true);
+  log(`Anunciando: ${script}`, 'warn');
+
+  speak(script, async () => {
+    setAnnounce(script, false);
+    await new Promise(r => setTimeout(r, 500)); // Pequeña espera extra de seguridad
+    await fadeVolume(20, originalVol, 1500);
+    currentVolume = originalVol;
+    updateVolUI(originalVol);
+    log('Volumen restaurado', 'ok');
+  });
+
+  announcedCount++;
+  document.getElementById('countVal').textContent = announcedCount;
+}
+
+async function announceNow() {
+  if (!spotifyToken) { log('No hay token Spotify', 'err'); return; }
+  try {
+    const track = await getCurrentTrack();
+    if (track?.item) await announce(track);
+    else log('No hay canción reproduciéndose', 'warn');
+  } catch (e) { log('Error: ' + e.message, 'err'); }
+}
+
+// ═══════════════════════════════════════════
+// VOLUME FADE
+// ═══════════════════════════════════════════
+async function fadeVolume(from, to, duration) {
+  const steps = 8;
+  const delay = duration / steps;
+  const diff = (to - from) / steps;
+  for (let i = 0; i <= steps; i++) {
+    const vol = Math.min(Math.max(Math.round(from + diff * i), 0), 100);
+    try {
+      await setVolume(vol);
+      updateVolUI(vol);
+    } catch (e) {
+      console.warn("Volume set failed:", e);
+    }
+    await new Promise(r => setTimeout(r, Math.max(delay, 200)));
+  }
+}
+
+function updateVolUI(val) {
+  document.getElementById('volFill').style.width = val + '%';
+  document.getElementById('volNum').textContent = val;
+}
+
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// ═══════════════════════════════════════════
+// RADIO LOOP
+// ═══════════════════════════════════════════
+async function startRadio() {
+  if (!spotifyToken) { log('Autenticá con Spotify primero', 'err'); return; }
+  radioRunning = true;
+  document.getElementById('startBtn').style.display = 'none';
+  document.getElementById('stopBtn').style.display = 'block';
+  setStatus('on-air', '🔴 ON AIR');
+  log('Radio iniciada — monitoreando Spotify...', 'ok');
+
+  vuInterval = setInterval(() => animateVU(radioRunning), 150);
+
+  // Initial announce
+  try {
+    const track = await getCurrentTrack();
+    if (track?.item) {
+      currentTrackId = track.item.id;
+      await announce(track);
+    }
+  } catch (e) { log('Error inicial: ' + e.message, 'err'); }
+
+  // Poll every 5s
+  pollInterval = setInterval(async () => {
+    if (!radioRunning) return;
+    try {
+      const track = await getCurrentTrack();
+      if (!track?.item) return;
+
+      // Update progress
+      const pct = (track.progress_ms / track.item.duration_ms) * 100;
+      document.getElementById('progressFill').style.width = pct + '%';
+      document.getElementById('timeElapsed').textContent = msToTime(track.progress_ms);
+      document.getElementById('timeTotal').textContent = msToTime(track.item.duration_ms);
+
+      // New track?
+      if (track.item.id !== currentTrackId && !isSpeaking) {
+        currentTrackId = track.item.id;
+        await announce(track);
+      }
+    } catch (e) { log('Poll error: ' + e.message, 'warn'); }
+  }, 5000);
+
+  // Refresh weather every 10 min
+  fetchWeather();
+  setInterval(fetchWeather, 600000);
+}
+
+function stopRadio() {
+  radioRunning = false;
+  clearInterval(pollInterval);
+  clearInterval(vuInterval);
+  animateVU(false);
+  window.speechSynthesis.cancel();
+  document.getElementById('startBtn').style.display = 'block';
+  document.getElementById('stopBtn').style.display = 'none';
+  setStatus('connected', 'Detenida — conectado a Spotify');
+  log('Radio detenida', 'warn');
+}
+
+// ═══════════════════════════════════════════
+// UI HELPERS
+// ═══════════════════════════════════════════
+function setStatus(type, text) {
+  const dot = document.getElementById('statusDot');
+  dot.className = 'dot ' + type;
+  document.getElementById('statusText').textContent = text;
+}
+
+function setAnnounce(text, speaking) {
+  const el = document.getElementById('announceText');
+  el.textContent = `"${text}"`;
+  el.className = 'announce-text' + (speaking ? ' speaking' : '');
+}
+
+function msToTime(ms) {
+  const s = Math.floor(ms / 1000);
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+}
+
+// Clock
+function updateClock() {
+  document.getElementById('clockVal').textContent =
+    new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+}
+updateClock();
+setInterval(updateClock, 1000);
+
+// ═══════════════════════════════════════════
+// ON LOAD — handle OAuth callback
+// ═══════════════════════════════════════════
+window.addEventListener('load', () => {
+  loadSaved();
+
+  // Preload voices
+  window.speechSynthesis.getVoices();
+  window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
+
+  // Check URL for auth code (URL params OR injected by server)
+  const params = new URLSearchParams(window.location.search);
+  const code = params.get('code') || window.__SPOTIFY_CODE__ || null;
+  if (code) {
+    log('Código OAuth recibido, obteniendo token...', 'warn');
+    handleCallback(code);
+    return;
+  }
+
+  // Restore session
+  const saved = localStorage.getItem('radioai_token');
+  const expiry = parseInt(localStorage.getItem('radioai_expiry') || '0');
+  if (saved && expiry > Date.now()) {
+    spotifyToken = saved;
+    refreshToken = localStorage.getItem('radioai_refresh');
+    tokenExpiry = expiry;
+    setStatus('connected', 'Sesión restaurada ✓');
+    document.getElementById('mainControls').style.display = 'flex';
+    log('Token previo restaurado', 'ok');
+  } else if (saved) {
+    refreshToken = localStorage.getItem('radioai_refresh');
+    refreshAccessToken().then(ok => {
+      if (ok) {
+        setStatus('connected', 'Sesión restaurada ✓');
+        document.getElementById('mainControls').style.display = 'flex';
+      }
+    });
+  }
+
+  fetchWeather();
+});
+</script>
+</body>
+</html>
